@@ -22,16 +22,16 @@ struct cRGB { uint8_t g; uint8_t r; uint8_t b; };
 
 #define NC 					-1
 
-#define PORT_1 				0x01
-#define PORT_2 				0x02
-#define PORT_3 				0x03
-#define PORT_4 				0x04
-#define PORT_5 				0x05
-#define PORT_6 				0x06
-#define PORT_7 				0x07
-#define PORT_8 				0x08
-#define M1     				0x09
-#define M2     				0x0a
+#define PORT_1 				((byte)0x01)
+#define PORT_2 				((byte)0x02)
+#define PORT_3 				((byte)0x03)
+#define PORT_4 				((byte)0x04)
+#define PORT_5 				((byte)0x05)
+#define PORT_6 				((byte)0x06)
+#define PORT_7 				((byte)0x07)
+#define PORT_8 				((byte)0x08)
+#define M1     				((byte)0x09)
+#define M2     				((byte)0x0a)
 
 #if defined(__AVR_ATmega32U4__) 
 // buzzer 

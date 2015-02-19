@@ -12,8 +12,16 @@
 #include "MePort.h"
 #include "MeDCMotor.h" 
 
+// example commands :
+// motor1 260 : f5602a941
+// port1  260 : f5602a141
+// 13 HIGH : f5
 #define NB_MOTOR 4
-MeDCMotor dc[NB_MOTOR];
+MeDCMotor dc[NB_MOTOR] = {
+	MeDCMotor(M1), MeDCMotor(M2),
+	MeDCMotor(PORT_1), MeDCMotor(PORT_2)
+};
+
 
 typedef struct MeModule {
 	int device;
@@ -31,15 +39,9 @@ union {
 } val;
 
 union {
-	byte byteVal[8];
-	double doubleVal;
-} valDouble;
-
-union {
 	byte byteVal[2];
 	short shortVal;
 } valShort;
-MeModule modules[12];
 
 int analogs[8] = { A0, A1, A2, A3, A4, A5, A6, A7 };
 String mVersion = "1.1.102";
@@ -47,13 +49,11 @@ boolean isAvailable = false;
 
 int len = 52;
 char buffer[52];
-char bufferBt[52];
 byte index = 0;
 byte dataLen;
-byte modulesLen = 0;
 boolean isStart = false;
-unsigned char irRead;
 char serialRead;
+
 #define VERSION 0
 #define MOTOR 10
 #define DIGITAL 30
@@ -66,7 +66,7 @@ char serialRead;
 #define RUN 2
 #define RESET 4
 #define START 5
-float angleServo = 90.0;
+
 unsigned char prevc = 0;
 double lastTime = 0.0;
 double currentTime = 0.0;
@@ -78,19 +78,24 @@ void setup() {
 	digitalWrite(13, HIGH);
 	delay(300);
 	digitalWrite(13, LOW);
-
-	dc = {
-		dc(M1), dc(M2), dc(PORT_1), dc(PORT_2)
-	};
 }
 
-MeDCMotor *getDc(int port) {
+MeDCMotor *getDc(byte port) {
 	for(byte m = 0; m < NB_MOTOR; m++) {
-		if (dc[m]._port == port) {
+		if (dc[m].getPort() == port) {
 			return &dc[m];
 		}
 	}
 	return NULL;
+}
+
+bool asciiCmd = false;
+
+byte fromHex(byte c) {
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'A' && c <= 'F') return c - 'A' + 0x0a;
+	if (c >= 'a' && c <= 'f') return c - 'a' + 0x0a;
+	return 0;
 }
 
 void loop() {
@@ -98,16 +103,17 @@ void loop() {
 	readSerial();
 	if (isAvailable) {
 		unsigned char c = serialRead & 0xff;
-		if (c == 0x55 && isStart == false) {
-			if (prevc == 0xff) {
+		if ((c == 0x55 ||c == '5') && isStart == false) {
+			if (prevc == 0xff || prevc == 'f') {
 				index = 1;
 				isStart = true;
+				asciiCmd = (prevc == 'f');
 			}
 		} else {
 			prevc = c;
 			if (isStart) {
 				if (index == 2) {
-					dataLen = c;
+					dataLen = asciiCmd ? fromHex(c) : c;
 				} else if (index > 2) {
 					dataLen--;
 				}
@@ -144,7 +150,11 @@ void writeEnd() {
 	Serial.println();
 }
 void writeSerial(unsigned char c) {
-	Serial.write(c);
+	if (asciiCmd) {
+		Serial.print(c, HEX); Serial.print(' ');
+	} else {
+		Serial.write(c);
+	}
 }
 void readSerial() {
 	isAvailable = false;
@@ -159,6 +169,14 @@ void readSerial() {
  0  1  2   3   4      5      6     7     8
  */
 void parseData() {
+	if (asciiCmd) {
+		// convert bytes from 3 to len-1
+		byte len = fromHex(readBuffer(2)) + 2;
+		while(len > 2) {
+			buffer[len] = fromHex(buffer[len]);
+			len--;
+		}
+	}
 	isStart = false;
 	int idx = readBuffer(3);
 	int action = readBuffer(4);
@@ -190,10 +208,7 @@ void callOK() {
 	writeSerial(0x55);
 	writeEnd();
 }
-void sendByte(char c) {
-	writeSerial(1);
-	writeSerial(c);
-}
+
 void sendString(String s) {
 	int l = s.length();
 	writeSerial(4);
@@ -210,46 +225,41 @@ void sendFloat(float value) {
 	writeSerial(val.byteVal[2]);
 	writeSerial(val.byteVal[3]);
 }
-void sendShort(double value) {
-	writeSerial(3);
-	valShort.shortVal = value;
-	writeSerial(valShort.byteVal[0]);
-	writeSerial(valShort.byteVal[1]);
-	writeSerial(valShort.byteVal[2]);
-	writeSerial(valShort.byteVal[3]);
-}
-void sendDouble(double value) {
-	writeSerial(2);
-	valDouble.doubleVal = value;
-	writeSerial(valDouble.byteVal[0]);
-	writeSerial(valDouble.byteVal[1]);
-	writeSerial(valDouble.byteVal[2]);
-	writeSerial(valDouble.byteVal[3]);
-}
 short readShort(int idx) {
 	valShort.byteVal[0] = readBuffer(idx);
 	valShort.byteVal[1] = readBuffer(idx + 1);
 	return valShort.shortVal;
 }
-float readFloat(int idx) {
-	val.byteVal[0] = readBuffer(idx);
-	val.byteVal[1] = readBuffer(idx + 1);
-	val.byteVal[2] = readBuffer(idx + 2);
-	val.byteVal[3] = readBuffer(idx + 3);
-	return val.floatVal;
-}
+
 void runModule(int device) {
 	//0xff 0x55 0x6 0x0 0x1 0xa 0x9 0x0 0x0 0xa
 	int port = readBuffer(6);
 	int pin = port;
+	if (asciiCmd) {
+		Serial.print("* runModule ");Serial.print(device);
+		Serial.print(" port ");Serial.println(port);
+	}
 	switch (device) {
 	case MOTOR:
 		{
 			valShort.byteVal[0] = readBuffer(7);
 			valShort.byteVal[1] = readBuffer(8);
 			MeDCMotor *dc = getDc(port);
+			if (asciiCmd) {
+				Serial.println((int)dc);
+			}
 			if (dc) {
+				if (asciiCmd) {
+					Serial.print("* Motor::run ");
+					Serial.print(port);
+					Serial.print(", ");
+					Serial.println(valShort.shortVal);
+				}
 				dc->run(valShort.shortVal);
+				if (asciiCmd) {
+					Serial.print(" => ");
+					Serial.println(dc->remaining());
+				}
 			}
 		}
 		break;
@@ -286,6 +296,7 @@ void runModule(int device) {
 		break;
 	}
 }
+
 void readSensor(int device) {
 	/**************************************************
 	 ff 55 len idx action device port slot data a

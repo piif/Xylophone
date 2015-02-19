@@ -7,10 +7,11 @@ class MeDCMotor: public MePort
 public:
 	MeDCMotor();
     MeDCMotor(uint8_t port);
-    void run(int speed);
+    void run(short duration);
     void stop();
     void step();
+    unsigned long remaining();
 private:
-    unsigned long endTime = 0;
+    unsigned long endTime;
 };
 #endif
