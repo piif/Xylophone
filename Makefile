@@ -6,22 +6,23 @@ export PROJECT_DIR := $(dir $(realpath ${MAKEFILE_LIST}))
 CORE_DIR := ${PROJECT_DIR}../ArduinoCore/
 
 # other arduino librairies project pathes this project depends on
-export DEPENDENCIES := ${CORE_DIR} ${CORE_DIR}../ArduinoLibs/ ${CORE_DIR}../ArduinoTools/
+#export DEPENDENCIES := ${CORE_DIR} ${CORE_DIR}../ArduinoLibs/ ${CORE_DIR}../ArduinoTools/
 
 # generate assembler source code also
-export WITH_ASSEMBLY := yes
+export WITH_ASSEMBLY := no
 
 # generate eeprom image
 export WITH_EEPROM := no
 
 # print size of geretated segments 
-export WITH_PRINT_SIZE := yes
+export WITH_PRINT_SIZE := no
 
 # only for programs : launch upload
-export WITH_UPLOAD := no
+export WITH_UPLOAD := yes
+
 # where to upload
-# TODO : try to auto detect with lsusb + /proc exploration
 export UPLOAD_DEVICE := /dev/ttyACM0
+export TARGET := Uno
 
 #export MAIN_SOURCE := ${PROJECT_DIR}main.cpp
 
@@ -36,4 +37,15 @@ endif
 ifneq (${TARGET},)
 	rm -rf ${PROJECT_DIR}target/${TARGET}
 endif
-	
+
+alternate: export ALL_SOURCES ?= $(wildcard alternate/*.cpp)
+alternate: export MAIN_SOURCE ?= alternate/firmware.ino
+
+firmware: export ALL_SOURCES ?= $(wildcard firmware/*.cpp firmware/*.ino)
+firmware: export MAIN_SOURCE ?= firmware/firmware.ino
+
+alternate: all
+firmware: console
+	echo $(MAIN_SOURCE) / $(ALL_SOURCES)
+
+.PHONY: firmware

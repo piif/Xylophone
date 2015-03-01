@@ -71,15 +71,6 @@ unsigned char prevc = 0;
 double lastTime = 0.0;
 double currentTime = 0.0;
 
-void setup() {
-	Serial.begin(115200);
-
-	pinMode(13, OUTPUT);
-	digitalWrite(13, HIGH);
-	delay(300);
-	digitalWrite(13, LOW);
-}
-
 MeDCMotor *getDc(byte port) {
 	for(byte m = 0; m < NB_MOTOR; m++) {
 		if (dc[m].getPort() == port) {
@@ -98,64 +89,13 @@ byte fromHex(byte c) {
 	return 0;
 }
 
-void loop() {
-	currentTime = millis() / 1000.0 - lastTime;
-	readSerial();
-	if (isAvailable) {
-		unsigned char c = serialRead & 0xff;
-		if ((c == 0x55 ||c == '5') && isStart == false) {
-			if (prevc == 0xff || prevc == 'f') {
-				index = 1;
-				isStart = true;
-				asciiCmd = (prevc == 'f');
-			}
-		} else {
-			prevc = c;
-			if (isStart) {
-				if (index == 2) {
-					dataLen = asciiCmd ? fromHex(c) : c;
-				} else if (index > 2) {
-					dataLen--;
-				}
-				writeBuffer(index, c);
-			}
-		}
-		index++;
-		if (index > 51) {
-			index = 0;
-			isStart = false;
-		}
-		if (isStart && dataLen == 0 && index > 3) {
-			isStart = false;
-			parseData();
-			index = 0;
-		}
-	}
-	for(byte m = 0; m < NB_MOTOR; m++) {
-		dc[m].step();
-	}
-}
-
 unsigned char readBuffer(int index) {
 	return buffer[index];
 }
 void writeBuffer(int index, unsigned char c) {
 	buffer[index] = c;
 }
-void writeHead() {
-	writeSerial(0xff);
-	writeSerial(0x55);
-}
-void writeEnd() {
-	Serial.println();
-}
-void writeSerial(unsigned char c) {
-	if (asciiCmd) {
-		Serial.print(c, HEX); Serial.print(' ');
-	} else {
-		Serial.write(c);
-	}
-}
+
 void readSerial() {
 	isAvailable = false;
 	if (Serial.available() > 0) {
@@ -164,45 +104,21 @@ void readSerial() {
 	}
 }
 
-/*
- ff 55 len idx action device port  slot  data a
- 0  1  2   3   4      5      6     7     8
- */
-void parseData() {
+void writeSerial(unsigned char c) {
 	if (asciiCmd) {
-		// convert bytes from 3 to len-1
-		byte len = fromHex(readBuffer(2)) + 2;
-		while(len > 2) {
-			buffer[len] = fromHex(buffer[len]);
-			len--;
-		}
-	}
-	isStart = false;
-	int idx = readBuffer(3);
-	int action = readBuffer(4);
-	int device = readBuffer(5);
-	switch (action) {
-	case GET:
-		writeHead();
-		writeSerial(idx);
-		readSensor(device);
-		writeEnd();
-		break;
-	case RUN:
-		runModule(device);
-		callOK();
-		break;
-	case RESET:
-		for(byte m = 0; m < NB_MOTOR; m++) {
-			dc[m].stop();
-		}
-		callOK();
-		break;
-	case START:
-		callOK();
-		break;
+		Serial.print(c, HEX); Serial.print(' ');
+	} else {
+		Serial.write(c);
 	}
 }
+void writeHead() {
+	writeSerial(0xff);
+	writeSerial(0x55);
+}
+void writeEnd() {
+	Serial.println();
+}
+
 void callOK() {
 	writeSerial(0xff);
 	writeSerial(0x55);
@@ -326,5 +242,92 @@ void readSensor(int device) {
 		sendFloat((float) currentTime);
 	}
 		break;
+	}
+}
+
+/*
+ ff 55 len idx action device port  slot  data a
+ 0  1  2   3   4      5      6     7     8
+ */
+void parseData() {
+	if (asciiCmd) {
+		// convert bytes from 3 to len-1
+		byte len = fromHex(readBuffer(2)) + 2;
+		while(len > 2) {
+			buffer[len] = fromHex(buffer[len]);
+			len--;
+		}
+	}
+	isStart = false;
+	int idx = readBuffer(3);
+	int action = readBuffer(4);
+	int device = readBuffer(5);
+	switch (action) {
+	case GET:
+		writeHead();
+		writeSerial(idx);
+		readSensor(device);
+		writeEnd();
+		break;
+	case RUN:
+		runModule(device);
+		callOK();
+		break;
+	case RESET:
+		for(byte m = 0; m < NB_MOTOR; m++) {
+			dc[m].stop();
+		}
+		callOK();
+		break;
+	case START:
+		callOK();
+		break;
+	}
+}
+
+void setup() {
+	Serial.begin(115200);
+
+	pinMode(13, OUTPUT);
+	digitalWrite(13, HIGH);
+	delay(300);
+	digitalWrite(13, LOW);
+}
+
+void loop() {
+	currentTime = millis() / 1000.0 - lastTime;
+	readSerial();
+	if (isAvailable) {
+		unsigned char c = serialRead & 0xff;
+		if ((c == 0x55 ||c == '5') && isStart == false) {
+			if (prevc == 0xff || prevc == 'f') {
+				index = 1;
+				isStart = true;
+				asciiCmd = (prevc == 'f');
+			}
+		} else {
+			prevc = c;
+			if (isStart) {
+				if (index == 2) {
+					dataLen = asciiCmd ? fromHex(c) : c;
+				} else if (index > 2) {
+					dataLen--;
+				}
+				writeBuffer(index, c);
+			}
+		}
+		index++;
+		if (index > 51) {
+			index = 0;
+			isStart = false;
+		}
+		if (isStart && dataLen == 0 && index > 3) {
+			isStart = false;
+			parseData();
+			index = 0;
+		}
+	}
+	for(byte m = 0; m < NB_MOTOR; m++) {
+		dc[m].step();
 	}
 }
