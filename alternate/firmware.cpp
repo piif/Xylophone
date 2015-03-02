@@ -1,6 +1,7 @@
 
 #include <Arduino.h>
 #include "firmware.h"
+#include "callbacks.h"
 #include "basicIO.h"
 #include "motor.h"
 #include "play.h"
@@ -24,11 +25,7 @@ void sendResult(byte index, float value) {
 // parse incoming buffer and launches according actions
 byte  parseMessage(byte *buffer, byte len) {
 	message *msg = (message *)buffer;
-	// actual buffer length must be at least 4 and match message.len byte
-	if (len < 4 || len < msg->len + 3) {
-		LOG("incomplete message");
-		return 0;
-	}
+	// TODO : add length validation, according to message type
 	if (msg->kind == MESSAGE_GET) {
 		float result;
 		switch(msg->payload.get.portType) {
@@ -54,7 +51,6 @@ byte  parseMessage(byte *buffer, byte len) {
 			basicIO::analogSet(msg->payload.write.port, msg->payload.write.value);
 			break;
 		case CMD_MOTOR:
-			LOG("TODO");
 			motor::run(msg->payload.write.port, msg->payload.write.value);
 			break;
 		case CMD_PLAY:
@@ -75,27 +71,19 @@ byte  parseMessage(byte *buffer, byte len) {
 // add incoming byte to current buffer and make minimal validation on it
 // silently ignoring garbage
 void addInput(int value) {
+	static byte toRead = 0;
+
 	if (value < 0) {
 		LOG("< 0");
 		return;
 	}
-	// end of packet or packet too big
-	// in fact, if packet were not cr/lf separated, she should have to parse length
-	// to avoid to block parsing
-	if(value == 0x0d || value == 0x0a || bufferIndex >= MESSAGE_MAX_LEN) {
-		if (bufferIndex != 0) {
-			LOG("parse");
-			byte read = parseMessage(buffer, bufferIndex);
-			if (read != bufferIndex) {
-				// TODO memcpy rest of buffer
-			}
-			bufferIndex = 0;
-		}
-		return;
-	}
-	// else while packet is not "started" ignore everything but ff,55
+	// while packet is not "started" ignore everything but ff,55
+	// (including cr and lf)
 	if (bufferIndex == 0 && value != 0xff) {
-		LOG("not ff");
+		if (value != '\r' && value != '\n') {
+			// warn on garbage
+			LOG("not ff");
+		}
 		return;
 	}
 	if (bufferIndex == 1 && value != 0x55) {
@@ -103,8 +91,20 @@ void addInput(int value) {
 		bufferIndex = 0;
 		return;
 	}
-	// else append to buffer
+	// if not garbage, append to buffer
 	buffer[bufferIndex++] = value;
+	// if it's "len" byte, use it to know how many bytes we have to read
+	if (bufferIndex == 4) {
+		toRead = value + 4;
+	} else {
+		// end of message => parse it
+		if (bufferIndex == toRead) {
+			LOG("parse");
+			parseMessage(buffer, bufferIndex);
+			// reset buffer
+			bufferIndex = toRead = 0;
+		}
+	}
 }
 
 void setup() {
@@ -117,5 +117,5 @@ void loop() {
 	while (Serial.available()) {
 		addInput(Serial.read());
 	}
-	delay(100);
+	Callbacks::call();
 }
