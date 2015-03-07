@@ -108,8 +108,16 @@ void addInput(int value) {
 }
 
 void setup() {
+	// force all outputs to 0 to avoid strange states at startup
+	for(byte p = 2; p <= 13; p++) {
+		pinMode(p, OUTPUT);
+		digitalWrite(p, LOW);
+	}
+	for(byte p = A0; p <= A5; p++) {
+		pinMode(p, OUTPUT);
+		digitalWrite(p, LOW);
+	}
 	Serial.begin(115200);
-	delay(100);
 	LOG("Setup OK");
 }
 
